@@ -16,6 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -127,6 +128,20 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
+    /// add a new map area to the memory set
+    fn unmap_vp(&self, start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].unmap_vp(start_va, end_va)
+    }
+
+    /// add a new map area to the memory set
+    fn add_map_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> Result<(), VirtAddr> {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].add_map_area(start_va, end_va, permission)
+    }
+
     /// Get the current 'Running' task's trap contexts.
     fn get_first_time(&self) -> usize {
         let inner = self.inner.exclusive_access();
@@ -216,6 +231,16 @@ pub fn current_user_token() -> usize {
 /// Get the current 'Running' task's trap contexts.
 pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
+}
+
+/// Get the current 'Running' task's trap contexts.
+pub fn add_map_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> Result<(), VirtAddr> {
+    TASK_MANAGER.add_map_area(start_va, end_va, permission)
+}
+
+/// unmap the virtual page
+pub fn unmap_vp(start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
+    TASK_MANAGER.unmap_vp(start_va, end_va)
 }
 
 /// Get the current 'Running' task's trap contexts.

@@ -1,7 +1,7 @@
 //! Process management syscalls
 use crate::{
-    config::MAX_SYSCALL_NUM, mm::translated_mut, task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, get_current_first_time, get_current_syscall_times, suspend_current_and_run_next, TaskStatus
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE}, mm::{translated_mut, MapPermission, VirtAddr}, task::{
+        add_map_area, change_program_brk, current_user_token, exit_current_and_run_next, get_current_first_time, get_current_syscall_times, suspend_current_and_run_next, unmap_vp, TaskStatus
     }, timer::{get_time_ms, get_time_us}
 };
 
@@ -69,13 +69,45 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    // 检查首地址是否对齐
+    if _start % PAGE_SIZE != 0 { return -1; }
+    let start_va = VirtAddr::from(_start);
+    let page_cnt = (_len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
+    let permission: MapPermission;
+    match _port {
+        0x0 => return -1,
+        0x1 => permission = MapPermission::R | MapPermission::U,
+        0x2 => permission = MapPermission::W | MapPermission::U,
+        0x3 => permission = MapPermission::R | MapPermission::U | MapPermission::W,
+        0x4 => permission = MapPermission::X | MapPermission::U,
+        0x5 => permission = MapPermission::R | MapPermission::U | MapPermission::X,
+        0x6 => permission = MapPermission::W | MapPermission::U | MapPermission::X,
+        0x7 => permission = MapPermission::R | MapPermission::U | MapPermission::X | MapPermission::W,
+        _ => return -1
+    }
+    match add_map_area(start_va, end_va, permission) {
+        Ok(_) => 0,
+        Err(_) => -1
+    }
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    // 检查首地址是否对齐
+    if _start % PAGE_SIZE != 0 { return -1; }
+    let start_va = VirtAddr::from(_start);
+    let page_cnt = (_len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
+    for i in 0..=page_cnt {
+        let _end_va = VirtAddr::from(end_va.0 - i * PAGE_SIZE);
+        match unmap_vp(start_va, _end_va) {
+            Ok(_) => { },
+            Err(_) => return -1
+        }
+    }
+    0
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

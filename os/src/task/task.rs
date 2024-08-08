@@ -2,7 +2,7 @@
 use super::TaskContext;
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{
-    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
+    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE
 };
 use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
@@ -42,6 +42,17 @@ impl TaskControlBlock {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
+    /// add a new map area to the memory set
+    pub fn unmap_vp(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
+        match self.memory_set.shrink_to(start_va, end_va) {
+            true => Ok(()),
+            false => Err(start_va)
+        }
+    }
+    /// add a new map area to the memory set
+    pub fn add_map_area(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> Result<(), VirtAddr> {
+        self.memory_set.insert_framed_area(start_va, end_va, permission)
+    }
     /// get the user token
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
@@ -73,7 +84,7 @@ impl TaskControlBlock {
             kernel_stack_bottom.into(),
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
-        );
+        ).unwrap();
         let task_control_block = Self {
             task_status,
             task_cx: TaskContext::goto_trap_return(kernel_stack_top),
