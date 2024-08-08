@@ -14,6 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
@@ -126,6 +127,25 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
+    /// Get the current 'Running' task's trap contexts.
+    fn get_first_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_first_time()
+    }
+
+    /// Get the current 'Running' task's trap contexts.
+    fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_syscall_times()
+    }
+
+    /// add current running task's syscall times
+    fn add_current_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].add_syscall_times(syscall_id);
+    }
+
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
@@ -196,6 +216,21 @@ pub fn current_user_token() -> usize {
 /// Get the current 'Running' task's trap contexts.
 pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
+}
+
+/// Get the current 'Running' task's trap contexts.
+pub fn get_current_first_time() -> usize {
+    TASK_MANAGER.get_first_time()
+}
+
+/// Get the current 'Running' task's trap contexts.
+pub fn get_current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_syscall_times()
+}
+
+/// add current running task's syscall times
+pub fn current_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.add_current_syscall_times(syscall_id);
 }
 
 /// Change the current 'Running' task's program break

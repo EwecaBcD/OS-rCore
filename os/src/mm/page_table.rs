@@ -1,6 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -8,13 +8,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// valid
         const V = 1 << 0;
+        /// read
         const R = 1 << 1;
+        /// write
         const W = 1 << 2;
+        /// execute
         const X = 1 << 3;
+        /// 
         const U = 1 << 4;
+        ///
         const G = 1 << 5;
+        ///
         const A = 1 << 6;
+        ///
         const D = 1 << 7;
     }
 }
@@ -143,6 +151,15 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+    /// get the page table entry from the virtual address
+    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        let vpn = va.floor();
+        let ppn = self.translate(vpn);
+        match ppn {
+            None => None,
+            Some(pte) => Some(PhysAddr::from(PhysAddr::from(pte.ppn()).0 | va.page_offset()))
+        }
+    }
     /// get the token from the page table
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
@@ -170,4 +187,17 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// get ppn by vpn from ptr
+pub fn translated_mut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(ptr as usize);
+    page_table.translate_va(va).unwrap().get_mut()
+}
+
+/// get pte by vpn
+pub fn translated(token: usize, vpn: VirtPageNum) -> Option<PageTableEntry> {
+    let page_table = PageTable::from_token(token);
+    page_table.translate(vpn)
 }
