@@ -144,10 +144,12 @@ impl PageTable {
     }
     /// remove the map between virtual page number and physical page number
     #[allow(unused)]
-    pub fn unmap(&mut self, vpn: VirtPageNum) {
+    pub fn unmap(&mut self, vpn: VirtPageNum) -> Result<(), VirtAddr>{
         let pte = self.find_pte(vpn).unwrap();
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        // assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        if !pte.is_valid() { return Err(VirtAddr::from(vpn)); }
         *pte = PageTableEntry::empty();
+        Ok(())
     }
     /// get the page table entry from the virtual page number
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {

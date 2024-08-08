@@ -97,15 +97,15 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     // 检查首地址是否对齐
     if _start % PAGE_SIZE != 0 { return -1; }
-    let start_va = VirtAddr::from(_start);
+    let mut start_vpn = VirtAddr::from(_start).floor();
     let page_cnt = (_len - 1 + PAGE_SIZE) / PAGE_SIZE;
-    let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
-    for i in 0..=page_cnt {
-        let _end_va = VirtAddr::from(end_va.0 - i * PAGE_SIZE);
-        match unmap_vp(start_va, _end_va) {
+    // let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
+    for _ in 0..page_cnt {
+        match unmap_vp(start_vpn) {
             Ok(_) => { },
             Err(_) => return -1
         }
+        start_vpn.0 += 1;
     }
     0
 }

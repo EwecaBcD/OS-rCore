@@ -16,7 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
-use crate::mm::{MapPermission, VirtAddr};
+use crate::mm::{MapPermission, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -129,10 +129,10 @@ impl TaskManager {
     }
 
     /// add a new map area to the memory set
-    fn unmap_vp(&self, start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
+    fn unmap_vp(&self, vpn: VirtPageNum) -> Result<(), VirtAddr> {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
-        inner.tasks[cur].unmap_vp(start_va, end_va)
+        inner.tasks[cur].unmap_vp(vpn)
     }
 
     /// add a new map area to the memory set
@@ -239,8 +239,8 @@ pub fn add_map_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermiss
 }
 
 /// unmap the virtual page
-pub fn unmap_vp(start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
-    TASK_MANAGER.unmap_vp(start_va, end_va)
+pub fn unmap_vp(vpn: VirtPageNum) -> Result<(), VirtAddr> {
+    TASK_MANAGER.unmap_vp(vpn)
 }
 
 /// Get the current 'Running' task's trap contexts.

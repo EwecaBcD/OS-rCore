@@ -2,7 +2,7 @@
 use super::TaskContext;
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{
-    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE
+    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE
 };
 use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
@@ -43,10 +43,10 @@ impl TaskControlBlock {
         self.trap_cx_ppn.get_mut()
     }
     /// add a new map area to the memory set
-    pub fn unmap_vp(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> Result<(), VirtAddr> {
-        match self.memory_set.shrink_to(start_va, end_va) {
+    pub fn unmap_vp(&mut self, vpn: VirtPageNum) -> Result<(), VirtAddr> {
+        match self.memory_set.unalloc_page(vpn) {
             true => Ok(()),
-            false => Err(start_va)
+            false => Err(VirtAddr::from(vpn))
         }
     }
     /// add a new map area to the memory set
