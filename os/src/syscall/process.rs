@@ -2,11 +2,11 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
-        add_task, current_first_time, current_syscall_times, current_task, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
+        add_task, current_first_time, current_syscall_times, current_task, current_user_token, exit_current_and_run_next, mmap_vp, munmap_vp, suspend_current_and_run_next, TaskStatus
     }, timer::{get_time_ms, get_time_us},
 };
 
@@ -151,19 +151,50 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_mmap",
         current_task().unwrap().pid.0
     );
-    -1
+    if _start % PAGE_SIZE != 0 { return -1; }
+    let start_va = VirtAddr::from(_start);
+    let page_cnt = (_len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
+    let permission: MapPermission;
+    match _port {
+        0x0 => return -1,
+        0x1 => permission = MapPermission::R | MapPermission::U,
+        0x2 => permission = MapPermission::W | MapPermission::U,
+        0x3 => permission = MapPermission::R | MapPermission::U | MapPermission::W,
+        0x4 => permission = MapPermission::X | MapPermission::U,
+        0x5 => permission = MapPermission::R | MapPermission::U | MapPermission::X,
+        0x6 => permission = MapPermission::W | MapPermission::U | MapPermission::X,
+        0x7 => permission = MapPermission::R | MapPermission::U | MapPermission::X | MapPermission::W,
+        _ => return -1
+    }
+    match mmap_vp(start_va, end_va, permission) {
+        Ok(_) => 0,
+        Err(_) => -1
+    }
 }
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_munmap",
         current_task().unwrap().pid.0
     );
-    -1
+    // 检查首地址是否对齐
+    if _start % PAGE_SIZE != 0 { return -1; }
+    let mut start_vpn = VirtAddr::from(_start).floor();
+    let page_cnt = (_len - 1 + PAGE_SIZE) / PAGE_SIZE;
+    // let end_va = VirtAddr::from(start_va.0 + page_cnt * PAGE_SIZE);
+    for _ in 0..page_cnt {
+        match munmap_vp(start_vpn) {
+            Ok(_) => { },
+            Err(_) => return -1
+        }
+        start_vpn.0 += 1;
+    }
+    0
 }
 
 /// change data segment size

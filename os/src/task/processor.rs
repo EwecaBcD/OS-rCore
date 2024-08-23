@@ -8,6 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -109,6 +110,18 @@ pub fn current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 pub fn add_current_syscall_times(syscall_id: usize) {
     let task = current_task().unwrap();
     task.add_syscall_times(syscall_id)
+}
+
+/// alloc pages
+pub fn mmap_vp(start_va: VirtAddr, end_va: VirtAddr, permission: crate::mm::MapPermission) -> Result<(), VirtAddr> {
+    let task = current_task().unwrap();
+    task.add_map_area(start_va, end_va, permission)
+}
+
+/// unalloc pages
+pub fn munmap_vp(vpn: VirtPageNum) -> Result<(), VirtAddr> {
+    let task = current_task().unwrap();
+    task.remove_page(vpn)
 }
 
 ///Get the mutable reference to trap context of current task
