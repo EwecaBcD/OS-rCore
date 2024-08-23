@@ -3,7 +3,7 @@ use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
@@ -51,6 +51,19 @@ impl TaskControlBlock {
     pub fn add_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner_exclusive_access();
         inner.syscall_times[syscall_id] += 1;
+    }
+    /// add map area
+    pub fn add_map_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> Result<(), VirtAddr> {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.insert_framed_area(start_va, end_va, permission)
+    }
+    /// remove page
+    pub fn remove_page(&self, vpn: VirtPageNum) -> Result<(), VirtAddr> {
+        let mut inner = self.inner_exclusive_access();
+        match inner.memory_set.remove_page(vpn) {
+            true => Ok(()),
+            false => Err(VirtAddr::from(vpn))
+        }
     }
 }
 
