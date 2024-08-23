@@ -7,6 +7,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -90,6 +91,24 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
+}
+
+/// Get the current first time
+pub fn current_first_time() -> usize {
+    let task = current_task().unwrap();
+    task.get_first_time()
+}
+
+/// Get the current syscall times
+pub fn current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    let task = current_task().unwrap();
+    task.get_syscall_times()
+}
+
+/// Get the current syscall times
+pub fn add_current_syscall_times(syscall_id: usize) {
+    let task = current_task().unwrap();
+    task.add_syscall_times(syscall_id)
 }
 
 ///Get the mutable reference to trap context of current task
