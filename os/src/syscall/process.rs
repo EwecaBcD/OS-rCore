@@ -7,7 +7,7 @@ use crate::{
     fs::{open_file, OpenFlags},
     mm::{translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
-        add_task, current_first_time, current_syscall_times, current_task, current_user_token, exit_current_and_run_next, mmap_vp, munmap_vp, suspend_current_and_run_next, TaskStatus
+        add_task, current_first_time, current_syscall_times, current_task, current_user_token, exit_current_and_run_next, mmap_vp, munmap_vp, set_priority, suspend_current_and_run_next, TaskStatus
     }, timer::{get_time_ms, get_time_us},
 };
 
@@ -237,8 +237,11 @@ pub fn sys_spawn(_path: *const u8) -> isize {
 // YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio < 2 { -1 }
+    else {
+        set_priority(_prio)
+    }
 }

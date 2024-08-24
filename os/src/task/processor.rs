@@ -112,6 +112,12 @@ pub fn add_current_syscall_times(syscall_id: usize) {
     task.add_syscall_times(syscall_id)
 }
 
+/// Set the priority of a task
+pub fn set_priority(prio: isize) -> isize {
+    let task = current_task().unwrap();
+    task.set_priority(prio)
+}
+
 /// alloc pages
 pub fn mmap_vp(start_va: VirtAddr, end_va: VirtAddr, permission: crate::mm::MapPermission) -> Result<(), VirtAddr> {
     let task = current_task().unwrap();

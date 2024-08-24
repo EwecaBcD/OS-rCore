@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::config::{BIG_STRIDE, MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
@@ -51,6 +51,22 @@ impl TaskControlBlock {
     pub fn add_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner_exclusive_access();
         inner.syscall_times[syscall_id] += 1;
+    }
+    /// Set priority
+    pub fn set_priority(&self, prio: isize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        inner.prio = prio;
+        prio
+    }
+    /// Get stride
+    pub fn get_stride(&self) -> isize {
+        let inner = self.inner_exclusive_access();
+        inner.stride
+    }
+    /// Add stride
+    pub fn add_stride(&self) {
+        let mut inner = self.inner_exclusive_access();
+        inner.stride += BIG_STRIDE / inner.prio;
     }
     /// add map area
     pub fn add_map_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> Result<(), VirtAddr> {
@@ -106,6 +122,12 @@ pub struct TaskControlBlockInner {
 
     /// syscall times
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    // stride
+    pub stride: isize,
+
+    // priority
+    pub prio: isize,
 }
 
 impl TaskControlBlockInner {
@@ -171,7 +193,9 @@ impl TaskControlBlock {
                     heap_bottom: user_sp,
                     program_brk: user_sp,
                     first_time: get_time_ms(),
-                    syscall_times: [0; MAX_SYSCALL_NUM]
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    stride: 0,
+                    prio: 16,
                 })
             },
         };
@@ -254,7 +278,9 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     first_time: get_time_ms(),
-                    syscall_times: [0; MAX_SYSCALL_NUM]
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    stride: 0,
+                    prio: 16,
                 })
             },
         });
@@ -310,7 +336,9 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     first_time: get_time_ms(),
-                    syscall_times: [0; MAX_SYSCALL_NUM]
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    stride: 0,
+                    prio: 16,
                 })
             },
         });
