@@ -4,7 +4,7 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, InodeType};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
@@ -20,6 +20,7 @@ use lazy_static::*;
 pub struct OSInode {
     readable: bool,
     writable: bool,
+    ino: u64,
     inner: UPSafeCell<OSInodeInner>,
 }
 /// The OS inode inner in 'UPSafeCell'
@@ -30,10 +31,11 @@ pub struct OSInodeInner {
 
 impl OSInode {
     /// create a new inode in memory
-    pub fn new(readable: bool, writable: bool, inode: Arc<Inode>) -> Self {
+    pub fn new(readable: bool, writable: bool, ino: u64, inode: Arc<Inode>) -> Self {
         Self {
             readable,
             writable,
+            ino,
             inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
         }
     }
@@ -107,20 +109,43 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
         if let Some(inode) = ROOT_INODE.find(name) {
             // clear size
             inode.clear();
-            Some(Arc::new(OSInode::new(readable, writable, inode)))
+            let ino = ROOT_INODE.find_inode_id(name);
+            Some(Arc::new(OSInode::new(readable, writable, ino.unwrap() as u64, inode)))
         } else {
             // create file
             ROOT_INODE
                 .create(name)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
+                .map(|inode| Arc::new(OSInode::new(readable, writable, ROOT_INODE.find_inode_id(name).unwrap() as u64, inode)))
         }
     } else {
         ROOT_INODE.find(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.clear();
             }
-            Arc::new(OSInode::new(readable, writable, inode))
+            Arc::new(OSInode::new(readable, writable, ROOT_INODE.find_inode_id(name).unwrap() as u64, inode))
         })
+    }
+}
+
+/// Link at
+pub fn link_at(old_name: &str, new_name: &str) {
+    let inode_id = ROOT_INODE.find_inode_id(old_name);
+    if !inode_id.is_none() {
+        let inode_id = inode_id.unwrap();
+        ROOT_INODE.add_direntry(new_name, inode_id);
+    }
+}
+
+/// Unlink at
+pub fn unlink_at(name: &str) -> bool {
+    let index = ROOT_INODE.find_direntry_id(name);
+    if index.is_none() {
+        false
+    }
+    else {
+        let index = index.unwrap();
+        ROOT_INODE.del_direntry(index);
+        true
     }
 }
 
@@ -154,5 +179,21 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn get_ino(&self) -> u64 {
+        self.ino
+    }
+    fn get_nlink(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_nlink_count()
+    }
+    fn get_type(&self) -> InodeType {
+        let inner = self.inner.exclusive_access();
+        let res = inner.inode.get_file_type();
+        match res {
+            0 => return InodeType::Directory,
+            1 => return InodeType::File,
+            _ => return InodeType::Null
+        }
     }
 }
