@@ -23,6 +23,100 @@ pub struct ProcessControlBlock {
     inner: UPSafeCell<ProcessControlBlockInner>,
 }
 
+/// Detector of deadlock
+pub struct DeadlockDetector {
+    /// Available
+    pub available: Vec<i32>,
+    /// Allocation matrix
+    pub allocation: Vec<Vec<i32>>,
+    /// Need matrix
+    pub need: Vec<Vec<i32>>,
+}
+
+impl DeadlockDetector {
+    /// new a deadlock detector
+    pub fn new() -> Self {
+        Self {
+            available: Vec::new(),
+            allocation: Vec::new(),
+            need: Vec::new(),
+        }
+    }
+    /// add a new thread
+    pub fn push_thread(&mut self, tid: usize) {
+        let mut new_vec = Vec::new();
+        for _ in 0..self.available.len() {
+            new_vec.push(0);
+        }
+        if tid < self.allocation.len() {
+            self.allocation[tid] = new_vec.clone();
+            self.need[tid] = new_vec.clone();
+        }
+        while self.allocation.len() < tid + 1 {
+            self.allocation.push(new_vec.clone());
+            self.need.push(new_vec.clone());
+        }
+    }
+    /// add a new resource
+    pub fn push_resource(&mut self, num: i32) {
+        self.available.push(num);
+        for i in 0..self.allocation.len() {
+            self.allocation[i].push(0);
+        }
+        for i in 0..self.need.len() {
+            self.need[i].push(0);
+        }
+    }
+    /// alloc resource, if in need, need will be sub
+    pub fn alloc_resource(&mut self, thread_i: usize, res_i: usize, num: i32) {
+        self.available[res_i] -= num;
+        self.allocation[thread_i][res_i] += num;
+        self.need[thread_i][res_i] -= num;
+    }
+    /// unalloc resource
+    pub fn unalloc_resource(&mut self, thread_i: usize, res_i: usize, num: i32) {
+        self.available[res_i] += num;
+        self.allocation[thread_i][res_i] -= num;
+    }
+    /// set need to num
+    pub fn set_need(&mut self, thread_i: usize, res_i: usize, num: i32) {
+        self.need[thread_i][res_i] = num;
+    }
+    /// detect if there is any deadlock
+    pub fn detect(&self) -> bool {
+        let thread_cnt = self.allocation.len();
+        let res_cnt = self.available.len();
+        let mut work = Vec::clone(&self.available);
+        let mut finish = vec![false; thread_cnt];
+        loop {
+            let mut found = false;
+            for i in 0..thread_cnt {
+                if finish[i] { continue; }
+                let mut run = true;
+                for j in 0..res_cnt {
+                    if self.need[i][j] > work[j] {
+                        run = false;
+                    }
+                }
+                if run {
+                    for j in 0..res_cnt {
+                        work[j] = work[j] + self.allocation[i][j];
+                        finish[i] = true;
+                    }
+                    found = true;
+                }
+            }
+            if !found {
+                for i in 0..thread_cnt {
+                    if !finish[i] { return false; }
+                }
+                return true;
+            }
+        }
+        
+    }
+}
+
 /// Inner of Process Control Block
 pub struct ProcessControlBlockInner {
     /// is zombie?
@@ -49,6 +143,12 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// deadlock_detect
+    pub deadlock_detect_on: bool,
+    /// deadlock detector of mutex
+    pub mutex_detector:DeadlockDetector,
+    /// deadlock detector of semaphore
+    pub semaphore_detector: DeadlockDetector,
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +219,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_on: false,
+                    mutex_detector: DeadlockDetector::new(),
+                    semaphore_detector: DeadlockDetector::new(),
                 })
             },
         });
@@ -144,6 +247,8 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+        process_inner.mutex_detector.push_thread(0);
+        process_inner.semaphore_detector.push_thread(0);
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
@@ -245,6 +350,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_on: false,
+                    mutex_detector: DeadlockDetector::new(),
+                    semaphore_detector: DeadlockDetector::new(),
                 })
             },
         });
@@ -267,6 +375,8 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
         child_inner.tasks.push(Some(Arc::clone(&task)));
+        child_inner.mutex_detector.push_thread(0);
+        child_inner.semaphore_detector.push_thread(0);
         drop(child_inner);
         // modify kstack_top in trap_cx of this thread
         let task_inner = task.inner_exclusive_access();

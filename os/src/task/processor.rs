@@ -95,6 +95,11 @@ pub fn current_user_token() -> usize {
     task.get_user_token()
 }
 
+/// Set the deadlock detect state of current process
+pub fn set_deadlock_detect(enabled: bool) {
+    current_process().inner_exclusive_access().deadlock_detect_on = enabled;
+}
+
 /// Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task()
